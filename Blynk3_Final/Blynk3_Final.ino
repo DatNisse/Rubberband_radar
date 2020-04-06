@@ -16,152 +16,84 @@
 
 SoftwareSerial SerialHC06(10, 11); // RX, TX
 
-// You should get Auth Token in the Blynk App.
-// Go to the Project Settings (nut icon).
 char auth[] = "YqFp6Zm4JC_0WE4XdkESqpcUebmfdoJS";
 BlynkTimer timer;
 
 NewPing sonar(TRIGPIN, ECHOPIN, MAX_DISTANCE);
 Servo radarservo, gunservo, fireservo;
-int fireCount = 20; //number of times objects been detected, if count is 0, gun fires
+int fireCount = 20; //number of times objects been detected, if count is 0, gun fires. this value is used to reduce falsepostivis and missfires.
 int rPos = 0, gPos = 0, fPos = 0; //position of servos.
 int mPos = 0; //manuall position of gun servo
 bool reverse = false; //direction of rotation of radar
 int standardInter = 100;
 int radret[3];
 int radarRef[180]; //referense library, what it scanned first when started
-int ledState = HIGH;
 bool manuall = false; //if manuall mode is engaged
-unsigned long startInter = 0; //used by delayfunction waiter()
-unsigned long currrentInter = 0;
 bool goStart = true;
 int reading = 0;
 
 
-
-
 void setup()
 {
-  //Debug console
-  //DebugSerial.begin(9600);
-  //DebugSerial.println("Waiting for connections...");
   radarservo.attach(RADARPIN);
   gunservo.attach(GUNPIN);
   fireservo.attach(FIREPIN);
   Serial.begin(9600);
 
-  //makes first radar sweep for reference points
-
-
+  //initiates blynkconnection for HC06 bluetooth module.
   SerialHC06.begin(9600);
-
-  //Serial.println("Waiting for connections...");
   Blynk.begin(SerialHC06, auth);
+
   timer.setInterval(300L, start);
   timer.setInterval(300L, moveServo);
-  //timer.setInterval(300L, pusher);
+
+  //makes first radar sweep for reference points
   radarservo.write(0);
 
   for (int pos = 0; pos <= 180; pos += 1)
   {
-
     radarservo.write(pos);
     if (pos < 180)
     {
       radarRef[pos] = ping();
     }
   }
-  fireservo.write(0);
-  
-  radarservo.write(0);
-  //radarservo.detach();
-  
-  gunservo.write(90);
-  //gunservo.detach();
-  
-  fireservo.write(180);
-  //fireservo.detach();
-  
-  
 
+  //after first sweep, resets all servos to startpositions
+  fireservo.write(0);
+  radarservo.write(0);
+  gunservo.write(90);
+  fireservo.write(180);
 }
 
 void loop()
 {
   Blynk.run();
   timer.run(); // Initiates BlynkTimer
-  
 }
 
-void moveServo()
+void moveServo() //function is called to move the servos.
 {
-  Serial.write("MS");
   radarservo.attach(RADARPIN);
   gunservo.attach(GUNPIN);
   fireservo.attach(FIREPIN);
-  
+
   radarservo.write(rPos);
   fireservo.write(fPos);
-  if(manuall)
+
+  if (manuall)
   {
     gunservo.write(mPos);
   }
   else
   {
     gunservo.write(gPos);
-  } 
-}
-void pusher()
-{
-  Serial.write("P");
-  //detacher();
-  radarservo.detach();
-  gunservo.detach();
-  fireservo.detach();
-  Blynk.virtualWrite(V6, reading);
-  Blynk.virtualWrite(V3, rPos);
-  Blynk.virtualWrite(V5, fireCount);
-}
-
-void attacher()
-{
-  radarservo.attach(RADARPIN);
-  gunservo.attach(GUNPIN);
-  fireservo.attach(FIREPIN);
-}
-
-void detacher()
-{
-  radarservo.detach();
-  gunservo.detach();
-  fireservo.detach();
-}
-
-
-void waiter(void func(), int inputInter)
-{
-  if (goStart == true)
-  {
-    startInter = millis();
-    goStart = false;
   }
-  else
-  {
-    currrentInter = millis();
-  }
-
-  if (currrentInter > (startInter + inputInter))
-  {
-    func();
-    goStart = true;
-  }
-
 }
 
-void start()
+void start() //main function for determining where the servos are to move.
 {
-  //pusher();
-  Serial.write("S");
+  //determins direction of rotation.
   if (rPos >= 175)
   {
     reverse = true;
@@ -170,43 +102,34 @@ void start()
   {
     reverse = false;
   }
-  //Blynk.virtualWrite(V3, pos);
-  //Blynk.virtualWrite(V5, millis() / 1000);
+
+  //if it's in automatic mode, it starts the rotation.
   if (manuall == false)
   {
-    //Blynk.virtualWrite(V5, fireCount);
-    if (fireCount <= 0)
+    if (fireCount <= 0) //if the target has been confirmed, gunservo is told to fire.
     {
       gunFire();
       fireCount = 20;
     }
     if (reverse == true)
-    {      
+    {
       rPos--;
     }
     else
-    {      
+    {
       rPos++;
     }
-    //waiter(radar, standardInter);
-    //attacher();
-    //radarservo.write(pos);
-    //moveServo(RADARPIN, pos);
-
+    radar();
   }
-  
-  //attacher();
-  //moveServo();
 }
 
-BLYNK_WRITE(V0)
+BLYNK_WRITE(V0) //Recives information regarding if the app is in manuall mode or not.
 {
   if (manuall == false)
   {
     manuall = true;
-    rPos = 0;
-    fireCount = 20;
-    //radarservo.write(pos);
+    rPos = 0; //resets radar position.
+    fireCount = 20; //resets firecount.
   }
   else
   {
@@ -214,16 +137,15 @@ BLYNK_WRITE(V0)
   }
 }
 
-BLYNK_WRITE(V1)
+BLYNK_WRITE(V1) //used to reset the firepin after fireing.
 {
   if (manuall == true)
   {
-    //fireservo.write(0);
     fPos = 0;
   }
 }
 
-BLYNK_WRITE(V2)
+BLYNK_WRITE(V2) //the value from the slider in blynk app is translated to position for servo to move to
 {
   if (manuall == true)
   {
@@ -235,39 +157,37 @@ BLYNK_WRITE(V2)
   }
 }
 
-BLYNK_WRITE(V4)
+BLYNK_WRITE(V4) //if in manuall mode, fires servo.
 {
   if (manuall == true)
   {
-    //fireservo.write(180);
     fPos = 180;
   }
 }
 
 
-void gunFire()
+void gunFire() //tels the firepinservo to turn and thus fire. After fireing, gun is reversed to manualmode for reload and reset.
 {
-  //fireservo.write(180);
   fPos = 180;
   fireCount = 0;
   manuall = true;
 }
 
-void radar()
+void radar() //Logic for the radar detection.
 {
   if (rPos <= 180)
   {
-    reading = ping();
-    if (radarRef[rPos] - 10 > reading)
+    reading = ping(); //Makes call to send out an ping for distance
+    if (radarRef[rPos] - 10 > reading) //if something is detected firecount is decresed, when firecount == 0 gun fires.
     {
-      if (fireCount < 10)
+      if (fireCount < 10) //if target is likely confirmed, orders gunservo to turn to pos.
       {
         gPos = rPos;
         //gunservo.write(pos);
       }
       fireCount--;
     }
-    else
+    else //if the target was lost, reset firecount to reduce false positivs.
     {
       fireCount = 20;
     }
@@ -288,12 +208,5 @@ int ping() //ping() sends out the ping from the ultrasonic sensor
     radret[i] = uS;
   }
   int avg = (radret[0] + radret[1] + radret[2]) / 3;
-  //  Serial.print("Ping: ");
-  //  Serial.print(avg);
-  //  Serial.println("cm");
-  //  Serial.print("Reference: ");
-  //  Serial.print(radarRef[pos]);
-  //  Serial.println("cm");
-  //Blynk.virtualWrite(V6, avg);
   return avg;
 }
