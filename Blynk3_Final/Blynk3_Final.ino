@@ -22,9 +22,10 @@ BlynkTimer timer;
 NewPing sonar(TRIGPIN, ECHOPIN, MAX_DISTANCE);
 Servo radarservo, gunservo, fireservo;
 int fireCount = 20; //number of times objects been detected, if count is 0, gun fires. this value is used to reduce falsepostivis and missfires.
-int rPos = 0, gPos = 0, fPos = 0; //position of servos.
-int mPos = 0; //manuall position of gun servo
+int rPos = 0, gPos = 90, fPos = 0; //position of servos.
+int mPos = 90; //manuall position of gun servo
 bool reverse = false; //direction of rotation of radar
+int resetFire = 15;
 int standardInter = 100;
 int radret[3];
 int radarRef[180]; //referense library, what it scanned first when started
@@ -60,10 +61,10 @@ void setup()
   }
 
   //after first sweep, resets all servos to startpositions
-  fireservo.write(0);
-  radarservo.write(0);
-  gunservo.write(90);
-  fireservo.write(180);
+  //fireservo.write(0);
+  radarservo.write(rPos);
+  gunservo.write(gPos);
+  fireservo.write(fPos);
 }
 
 void loop()
@@ -109,7 +110,7 @@ void start() //main function for determining where the servos are to move.
     if (fireCount <= 0) //if the target has been confirmed, gunservo is told to fire.
     {
       gunFire();
-      fireCount = 20;
+      fireCount = resetFire;
     }
     if (reverse == true)
     {
@@ -125,11 +126,12 @@ void start() //main function for determining where the servos are to move.
 
 BLYNK_WRITE(V0) //Recives information regarding if the app is in manuall mode or not.
 {
-  if (manuall == false)
+  int temp = param.asInt();
+  if (temp == 1)
   {
     manuall = true;
     rPos = 0; //resets radar position.
-    fireCount = 20; //resets firecount.
+    fireCount = resetFire; //resets firecount.
   }
   else
   {
@@ -139,7 +141,8 @@ BLYNK_WRITE(V0) //Recives information regarding if the app is in manuall mode or
 
 BLYNK_WRITE(V1) //used to reset the firepin after fireing.
 {
-  if (manuall == true)
+  int temp = param.asInt();
+  if (manuall == true && temp == 1)
   {
     fPos = 0;
   }
@@ -159,7 +162,8 @@ BLYNK_WRITE(V2) //the value from the slider in blynk app is translated to positi
 
 BLYNK_WRITE(V4) //if in manuall mode, fires servo.
 {
-  if (manuall == true)
+  int temp = param.asInt();
+  if (manuall == true && temp == 1)
   {
     fPos = 180;
   }
@@ -169,7 +173,7 @@ BLYNK_WRITE(V4) //if in manuall mode, fires servo.
 void gunFire() //tels the firepinservo to turn and thus fire. After fireing, gun is reversed to manualmode for reload and reset.
 {
   fPos = 180;
-  fireCount = 0;
+  fireCount = resetFire;
   manuall = true;
 }
 
@@ -180,7 +184,7 @@ void radar() //Logic for the radar detection.
     reading = ping(); //Makes call to send out an ping for distance
     if (radarRef[rPos] - 10 > reading) //if something is detected firecount is decresed, when firecount == 0 gun fires.
     {
-      if (fireCount < 10) //if target is likely confirmed, orders gunservo to turn to pos.
+      if (fireCount < 5) //if target is likely confirmed, orders gunservo to turn to pos.
       {
         gPos = rPos;
         //gunservo.write(pos);
@@ -189,7 +193,7 @@ void radar() //Logic for the radar detection.
     }
     else //if the target was lost, reset firecount to reduce false positivs.
     {
-      fireCount = 20;
+      fireCount++;
     }
   }
 }
